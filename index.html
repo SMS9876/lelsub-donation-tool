@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KST ↔ Unix Timestamp 변환기</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262a33;
+    --text: #e6e8eb;
+    --sub: #9aa1ac;
+    --accent: #7dd3fc;
+    --accent-dim: #38506b;
+    --danger: #f87171;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --border: #e2e4e9;
+      --text: #1a1c20;
+      --sub: #6b7280;
+      --accent: #0ea5e9;
+      --accent-dim: #bae6fd;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262a33;
+    --text: #e6e8eb;
+    --sub: #9aa1ac;
+    --accent: #7dd3fc;
+    --accent-dim: #38506b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 60px;
+  }
+  .wrap {
+    width: 100%;
+    max-width: 480px;
+  }
+  h1 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .sub {
+    font-size: 12.5px;
+    color: var(--sub);
+    margin: 0 0 20px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--sub);
+    margin-bottom: 6px;
+  }
+  input[type="datetime-local"],
+  input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    padding: 9px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  .btn-primary {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--text);
+    flex: 1;
+  }
+  .result-box {
+    margin-top: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .result-value {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+    word-break: break-all;
+  }
+  .copy-btn { white-space: nowrap; }
+  .copy-btn.copied { border-color: #4ade80; color: #4ade80; }
+  .error { color: var(--danger); font-size: 12px; margin-top: 6px; min-height: 14px; }
+  .hint { font-size: 11px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>KST ↔ Unix Timestamp 변환기</h1>
+  <p class="sub">한국 시간 기준으로 입력/표시됩니다. LuckPerms 등 초 단위(10자리) epoch 값용.</p>
+
+  <div class="card" style="padding: 12px 18px; display:flex; justify-content:space-between; align-items:center;">
+    <span style="font-size:12px; color: var(--sub);">현재 기준 시각 (KST)</span>
+    <span id="now-clock" style="font-size:13px; font-weight:600; color: var(--text);">-</span>
+  </div>
+
+  <div class="card">
+    <h2>한국 시간 → Unix Timestamp</h2>
+    <label for="dt-input">날짜 및 시각 (KST)</label>
+    <input type="datetime-local" id="dt-input" step="1" lang="en-GB">
+    <div class="row">
+      <button id="btn-now">지금</button>
+      <button id="btn-month" class="btn-primary">30일 뒤</button>
+    </div>
+    <div class="result-box">
+      <div class="result-value" id="epoch-result">-</div>
+      <button class="copy-btn" id="copy-epoch">복사</button>
+    </div>
+
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <label for="nickname-input">닉네임</label>
+      <input type="text" id="nickname-input" placeholder="닉네임 입력">
+      <div class="row" style="margin-top: 10px;">
+        <div style="flex:1;">
+          <label for="group-select" style="margin-bottom:6px;">그룹</label>
+          <select id="group-select" style="width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:14px; font-family:inherit;">
+            <option value="expert">expert</option>
+            <option value="elite">elite</option>
+            <option value="prime">prime</option>
+            <option value="eternal">eternal</option>
+          </select>
+        </div>
+      </div>
+      <div class="result-box" style="margin-top: 12px;">
+        <div class="result-value" id="cmd-result" style="font-size:13px; color: var(--text); font-family: monospace;">-</div>
+        <button class="copy-btn" id="copy-cmd">복사</button>
+      </div>
+      <div class="hint">위 명령어를 콘솔에 붙여넣으면 돼 (앞에 / 없음)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Unix Timestamp → 한국 시간</h2>
+    <label for="epoch-input">Unix Timestamp (초 단위)</label>
+    <input type="text" id="epoch-input" inputmode="numeric" placeholder="예: 1798227000">
+    <div class="error" id="epoch-error"></div>
+    <div class="result-box">
+      <div class="result-value" id="kst-result">-</div>
+      <button class="copy-btn" id="copy-kst">복사</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const dtInput = document.getElementById('dt-input');
+  const epochResult = document.getElementById('epoch-result');
+  const nicknameInput = document.getElementById('nickname-input');
+  const groupSelect = document.getElementById('group-select');
+  const cmdResult = document.getElementById('cmd-result');
+  const epochInput = document.getElementById('epoch-input');
+  const kstResult = document.getElementById('kst-result');
+  const epochError = document.getElementById('epoch-error');
+
+  const KST_OFFSET_MIN = 9 * 60;
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function setDefaultDate(mode) {
+    const d = new Date();
+    // Convert "now" to KST wall-clock components
+    let kst = new Date(d.getTime() + (KST_OFFSET_MIN + d.getTimezoneOffset()) * 60000);
+    if (mode === '30days') {
+      // 30-day plan: expires at +29 days, 23:59:59 (start day counts as day 1)
+      kst.setDate(kst.getDate() + 29);
+      kst.setHours(23, 59, 59, 0);
+    }
+    const val = `${kst.getFullYear()}-${pad(kst.getMonth()+1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}`;
+    dtInput.value = val;
+    updateEpochFromInput();
+  }
+
+  function updateEpochFromInput() {
+    if (!dtInput.value) { epochResult.textContent = '-'; updateCommand(); return; }
+    const [datePart, timePart] = dtInput.value.split('T');
+    const [y, mo, da] = datePart.split('-').map(Number);
+    const [h, mi, se] = (timePart || '00:00:00').split(':').map(Number);
+    // Treat the input as KST wall-clock, convert to UTC epoch
+    const utcMs = Date.UTC(y, mo - 1, da, h, mi, se || 0) - KST_OFFSET_MIN * 60000;
+    const epoch = Math.floor(utcMs / 1000);
+    epochResult.textContent = epoch;
+    updateCommand();
+  }
+
+  function updateCommand() {
+    const nick = nicknameInput.value.trim() || '닉네임';
+    const group = groupSelect.value;
+    const epoch = epochResult.textContent;
+    if (!epoch || epoch === '-') { cmdResult.textContent = '-'; return; }
+    cmdResult.textContent = `lp user ${nick} parent addtemp ${group} ${epoch} accumulate`;
+  }
+
+  function updateKstFromEpoch() {
+    const raw = epochInput.value.trim();
+    epochError.textContent = '';
+    if (!raw) { kstResult.textContent = '-'; return; }
+    if (!/^-?\d+$/.test(raw)) {
+      epochError.textContent = '숫자만 입력해줘 (초 단위 Unix timestamp)';
+      kstResult.textContent = '-';
+      return;
+    }
+    const epochSec = parseInt(raw, 10);
+    const utcMs = epochSec * 1000;
+    const kstMs = utcMs + KST_OFFSET_MIN * 60000;
+    const kst = new Date(kstMs);
+    const dayNames = ['일','월','화','수','목','금','토'];
+    const str = `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth()+1)}-${pad(kst.getUTCDate())} ${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}:${pad(kst.getUTCSeconds())} (${dayNames[kst.getUTCDay()]}) KST`;
+    kstResult.textContent = str;
+  }
+
+  function copyText(text, btn) {
+    if (!text || text === '-') return;
+    navigator.clipboard.writeText(text).then(() => {
+      const original = btn.textContent;
+      btn.textContent = '완료';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1200);
+    }).catch(() => {
+      btn.textContent = '실패';
+      setTimeout(() => { btn.textContent = '복사'; }, 1200);
+    });
+  }
+
+  function updateNowClock() {
+    const d = new Date();
+    const kst = new Date(d.getTime() + (KST_OFFSET_MIN + d.getTimezoneOffset()) * 60000);
+    const dayNames = ['일','월','화','수','목','금','토'];
+    const str = `${kst.getFullYear()}-${pad(kst.getMonth()+1)}-${pad(kst.getDate())} ${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())} (${dayNames[kst.getDay()]})`;
+    document.getElementById('now-clock').textContent = str;
+  }
+
+  dtInput.addEventListener('input', updateEpochFromInput);
+  nicknameInput.addEventListener('input', updateCommand);
+  groupSelect.addEventListener('change', updateCommand);
+  epochInput.addEventListener('input', updateKstFromEpoch);
+  document.getElementById('btn-now').addEventListener('click', () => setDefaultDate('now'));
+  document.getElementById('btn-month').addEventListener('click', () => setDefaultDate('30days'));
+  document.getElementById('copy-epoch').addEventListener('click', (e) => copyText(epochResult.textContent, e.target));
+  document.getElementById('copy-kst').addEventListener('click', (e) => copyText(kstResult.textContent, e.target));
+  document.getElementById('copy-cmd').addEventListener('click', (e) => copyText(cmdResult.textContent, e.target));
+
+  // Init: default to 30-day plan expiry
+  setDefaultDate('30days');
+  updateNowClock();
+  setInterval(updateNowClock, 1000);
+</script>
+</body>
+</html>
