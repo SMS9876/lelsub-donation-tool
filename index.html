@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KST ↔ Unix Timestamp 변환기</title>
+<title>LELSUB 후원 Tool</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -137,8 +137,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>KST ↔ Unix Timestamp 변환기</h1>
-  <p class="sub">한국 시간 기준으로 입력/표시됩니다. LuckPerms 등 초 단위(10자리) epoch 값용.</p>
+  <h1>🌳 LELSUB 후원 Tool</h1>
+  <p class="sub">후원 패스 만료시각 계산, LuckPerms 명령어, 안내 메시지까지 한 번에.</p>
 
   <div class="card" style="padding: 12px 18px; display:flex; justify-content:space-between; align-items:center;">
     <span style="font-size:12px; color: var(--sub);">현재 기준 시각 (KST)</span>
@@ -146,7 +146,7 @@
   </div>
 
   <div class="card">
-    <h2>한국 시간 → Unix Timestamp</h2>
+    <h2>만료 시각 설정</h2>
     <label for="dt-input">날짜 및 시각 (KST)</label>
     <input type="datetime-local" id="dt-input" step="1" lang="en-GB">
     <div class="row">
@@ -159,6 +159,7 @@
     </div>
 
     <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+      <div style="font-size:13px; font-weight:600; color: var(--accent); margin-bottom: 10px;">LuckPerms 명령어</div>
       <label for="nickname-input">닉네임</label>
       <input type="text" id="nickname-input" placeholder="닉네임 입력">
       <div class="row" style="margin-top: 10px;">
@@ -181,15 +182,14 @@
   </div>
 
   <div class="card">
-    <h2>Unix Timestamp → 한국 시간</h2>
-    <label for="epoch-input">Unix Timestamp (초 단위)</label>
-    <input type="text" id="epoch-input" inputmode="numeric" placeholder="예: 1798227000">
-    <div class="error" id="epoch-error"></div>
-    <div class="result-box">
-      <div class="result-value" id="kst-result">-</div>
-      <button class="copy-btn" id="copy-kst">복사</button>
+    <h2>후원 완료 메시지</h2>
+    <label for="msg-result">복사용 안내 메시지</label>
+    <textarea id="msg-result" readonly rows="9" style="width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:13px; font-family: monospace; resize: vertical; line-height:1.6;"></textarea>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" id="copy-msg" style="flex:1;">메시지 복사</button>
     </div>
   </div>
+
 </div>
 
 <script>
@@ -198,9 +198,7 @@
   const nicknameInput = document.getElementById('nickname-input');
   const groupSelect = document.getElementById('group-select');
   const cmdResult = document.getElementById('cmd-result');
-  const epochInput = document.getElementById('epoch-input');
-  const kstResult = document.getElementById('kst-result');
-  const epochError = document.getElementById('epoch-error');
+  const msgResult = document.getElementById('msg-result');
 
   const KST_OFFSET_MIN = 9 * 60;
 
@@ -232,30 +230,49 @@
     updateCommand();
   }
 
+  const PASS_PRICE = { expert: 3900, elite: 7900, prime: 15900, eternal: 31900 };
+
+  function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function formatWon(n) { return n.toLocaleString('ko-KR'); }
+
   function updateCommand() {
     const nick = nicknameInput.value.trim() || '닉네임';
     const group = groupSelect.value;
     const epoch = epochResult.textContent;
-    if (!epoch || epoch === '-') { cmdResult.textContent = '-'; return; }
-    cmdResult.textContent = `lp user ${nick} parent addtemp ${group} ${epoch} accumulate`;
+    if (!epoch || epoch === '-') { cmdResult.textContent = '-'; } else {
+      cmdResult.textContent = `lp user ${nick} parent addtemp ${group} ${epoch} accumulate`;
+    }
+    updateMessage();
   }
 
-  function updateKstFromEpoch() {
-    const raw = epochInput.value.trim();
-    epochError.textContent = '';
-    if (!raw) { kstResult.textContent = '-'; return; }
-    if (!/^-?\d+$/.test(raw)) {
-      epochError.textContent = '숫자만 입력해줘 (초 단위 Unix timestamp)';
-      kstResult.textContent = '-';
-      return;
-    }
-    const epochSec = parseInt(raw, 10);
-    const utcMs = epochSec * 1000;
-    const kstMs = utcMs + KST_OFFSET_MIN * 60000;
-    const kst = new Date(kstMs);
-    const dayNames = ['일','월','화','수','목','금','토'];
-    const str = `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth()+1)}-${pad(kst.getUTCDate())} ${pad(kst.getUTCHours())}:${pad(kst.getUTCMinutes())}:${pad(kst.getUTCSeconds())} (${dayNames[kst.getUTCDay()]}) KST`;
-    kstResult.textContent = str;
+  function updateMessage() {
+    if (!dtInput.value) { msgResult.value = '-'; return; }
+    const nick = nicknameInput.value.trim() || '닉네임';
+    const group = groupSelect.value;
+    const groupCap = capitalize(group);
+    const price = PASS_PRICE[group];
+
+    // Start date: today, in KST
+    const now = new Date();
+    const nowKst = new Date(now.getTime() + (KST_OFFSET_MIN + now.getTimezoneOffset()) * 60000);
+    const startDate = `${nowKst.getFullYear()}. ${pad(nowKst.getMonth()+1)}. ${pad(nowKst.getDate())}.`;
+
+    // End date: from the KST wall-clock value already in dt-input
+    const [datePart] = dtInput.value.split('T');
+    const [ey, em, ed] = datePart.split('-');
+    const endDate = `${ey}. ${em}. ${ed}.`;
+
+    msgResult.value =
+`## [${groupCap} Pass] 후원 완료 ✅
+> 서버에 후원해 주셔서 감사합니다. 
+
+닉네임: ${nick}
+패스 기간: ${startDate} ~ ${endDate}
+
+내용: ${groupCap} Pass | 금액: ₩${formatWon(price)}
+
+후원하신 패스는 **서버 재접속 시** 사용 가능합니다.
+-# 🌳 Lelsub.kro.kr | SEASON4`;
   }
 
   function copyText(text, btn) {
@@ -282,12 +299,11 @@
   dtInput.addEventListener('input', updateEpochFromInput);
   nicknameInput.addEventListener('input', updateCommand);
   groupSelect.addEventListener('change', updateCommand);
-  epochInput.addEventListener('input', updateKstFromEpoch);
   document.getElementById('btn-now').addEventListener('click', () => setDefaultDate('now'));
   document.getElementById('btn-month').addEventListener('click', () => setDefaultDate('30days'));
   document.getElementById('copy-epoch').addEventListener('click', (e) => copyText(epochResult.textContent, e.target));
-  document.getElementById('copy-kst').addEventListener('click', (e) => copyText(kstResult.textContent, e.target));
   document.getElementById('copy-cmd').addEventListener('click', (e) => copyText(cmdResult.textContent, e.target));
+  document.getElementById('copy-msg').addEventListener('click', (e) => copyText(msgResult.value, e.target));
 
   // Init: default to 30-day plan expiry
   setDefaultDate('30days');
