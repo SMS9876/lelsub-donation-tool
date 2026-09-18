@@ -82,6 +82,7 @@
     margin-bottom: 6px;
   }
   input[type="datetime-local"],
+  input[type="date"],
   input[type="text"] {
     width: 100%;
     padding: 10px 12px;
@@ -103,8 +104,14 @@
     color: var(--text);
     padding: 9px 12px;
     cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
   }
   button:hover { border-color: var(--accent); }
+  button:active { filter: brightness(0.88); }
+  button:focus, button:focus-visible { outline: none; border-color: var(--accent); }
   .btn-primary {
     background: var(--accent-dim);
     border-color: var(--accent);
@@ -147,15 +154,26 @@
 
   <div class="card">
     <h2>만료 시각 설정</h2>
-    <label for="dt-input">날짜 및 시각 (KST)</label>
-    <input type="datetime-local" id="dt-input" step="1" lang="en-GB">
     <div class="row">
-      <button id="btn-now">지금</button>
-      <button id="btn-month" class="btn-primary">30일 뒤</button>
+      <button id="mode-now" class="btn-primary" style="flex:1;">지금 기준</button>
+      <button id="mode-custom" style="flex:1;">특정 날짜 기준</button>
     </div>
+
+    <div id="custom-date-row" style="display:none; margin-top: 10px;">
+      <input type="date" id="custom-start-input" lang="en-GB">
+    </div>
+
+    <div style="margin-top: 14px;">
+      <label for="dt-input">만료 시각 (KST, 직접 수정 가능)</label>
+      <input type="datetime-local" id="dt-input" step="1" lang="en-GB">
+    </div>
+
     <div class="result-box">
-      <div class="result-value" id="epoch-result">-</div>
-      <button class="copy-btn" id="copy-epoch">복사</button>
+      <div style="flex:1;">
+        <label style="margin-bottom:6px;">Unix Timestamp (30일 뒤 만료 시각)</label>
+        <div class="result-value" id="epoch-result">-</div>
+      </div>
+      <button class="copy-btn" id="copy-epoch" style="align-self:flex-end;">복사</button>
     </div>
 
     <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
@@ -190,6 +208,16 @@
     </div>
   </div>
 
+  <div class="card">
+    <h2>만료 예정 안내 메시지</h2>
+    <label for="days-left-input">남은 일수</label>
+    <input type="number" id="days-left-input" min="0" value="1" style="width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:14px; font-family:inherit;">
+    <textarea id="expiry-msg-result" readonly rows="7" style="margin-top:12px; width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:13px; font-family: monospace; resize: vertical; line-height:1.6;"></textarea>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-primary" id="copy-expiry-msg" style="flex:1;">메시지 복사</button>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -199,22 +227,33 @@
   const groupSelect = document.getElementById('group-select');
   const cmdResult = document.getElementById('cmd-result');
   const msgResult = document.getElementById('msg-result');
+  const daysLeftInput = document.getElementById('days-left-input');
+  const expiryMsgResult = document.getElementById('expiry-msg-result');
 
   const KST_OFFSET_MIN = 9 * 60;
+  let passStartDate = null; // {y, mo, da} in KST — the start date last used for a 30-day calculation
 
   function pad(n) { return String(n).padStart(2, '0'); }
 
-  function setDefaultDate(mode) {
+  function getTodayKST() {
     const d = new Date();
-    // Convert "now" to KST wall-clock components
-    let kst = new Date(d.getTime() + (KST_OFFSET_MIN + d.getTimezoneOffset()) * 60000);
-    if (mode === '30days') {
-      // 30-day plan: expires at +29 days, 23:59:59 (start day counts as day 1)
-      kst.setDate(kst.getDate() + 29);
-      kst.setHours(23, 59, 59, 0);
-    }
-    const val = `${kst.getFullYear()}-${pad(kst.getMonth()+1)}-${pad(kst.getDate())}T${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}`;
-    dtInput.value = val;
+    const kst = new Date(d.getTime() + (KST_OFFSET_MIN + d.getTimezoneOffset()) * 60000);
+    return { y: kst.getFullYear(), mo: kst.getMonth() + 1, da: kst.getDate(),
+              h: kst.getHours(), mi: kst.getMinutes(), se: kst.getSeconds() };
+  }
+
+  // Pure calendar-date arithmetic (no timezone conversion needed — a KST calendar
+  // date plus 29 days is still a KST calendar date).
+  function plus29Days(y, mo, da) {
+    const d = new Date(Date.UTC(y, mo - 1, da));
+    d.setUTCDate(d.getUTCDate() + 29);
+    return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, da: d.getUTCDate() };
+  }
+
+  function applyStartDate(y, mo, da) {
+    passStartDate = { y, mo, da };
+    const expiry = plus29Days(y, mo, da);
+    dtInput.value = `${expiry.y}-${pad(expiry.mo)}-${pad(expiry.da)}T23:59:59`;
     updateEpochFromInput();
   }
 
@@ -252,10 +291,9 @@
     const groupCap = capitalize(group);
     const price = PASS_PRICE[group];
 
-    // Start date: today, in KST
-    const now = new Date();
-    const nowKst = new Date(now.getTime() + (KST_OFFSET_MIN + now.getTimezoneOffset()) * 60000);
-    const startDate = `${nowKst.getFullYear()}. ${pad(nowKst.getMonth()+1)}. ${pad(nowKst.getDate())}.`;
+    // Start date: the date last used for a 30-day calculation (defaults to today)
+    const sd = passStartDate || (() => { const t = getTodayKST(); return { y: t.y, mo: t.mo, da: t.da }; })();
+    const startDate = `${sd.y}. ${pad(sd.mo)}. ${pad(sd.da)}.`;
 
     // End date: from the KST wall-clock value already in dt-input
     const [datePart] = dtInput.value.split('T');
@@ -272,7 +310,26 @@
 내용: ${groupCap} Pass | 금액: ₩${formatWon(price)}
 
 후원하신 패스는 **서버 재접속 시** 사용 가능합니다.
--# 🌳 Lelsub.kro.kr | SEASON4`;
+-# 🌳 Lelsub.kr | SEASON4`;
+
+    updateExpiryMessage();
+  }
+
+  function updateExpiryMessage() {
+    if (!dtInput.value) { expiryMsgResult.value = '-'; return; }
+    const group = groupSelect.value;
+    const groupCap = capitalize(group);
+    const [datePart] = dtInput.value.split('T');
+    const [ey, em, ed] = datePart.split('-');
+    const endDate = `${ey}. ${em}. ${ed}.`;
+    const days = daysLeftInput.value === '' ? 0 : parseInt(daysLeftInput.value, 10);
+
+    expiryMsgResult.value =
+`## [${groupCap} Pass] 안내
+> 📅 만료 예정일: ${endDate}
+
+- [${groupCap} Pass] 종료일이 **${days}일** 남았습니다.
+-# 🌳 Lelsub.kr | SEASON4`;
   }
 
   function copyText(text, btn) {
@@ -299,14 +356,45 @@
   dtInput.addEventListener('input', updateEpochFromInput);
   nicknameInput.addEventListener('input', updateCommand);
   groupSelect.addEventListener('change', updateCommand);
-  document.getElementById('btn-now').addEventListener('click', () => setDefaultDate('now'));
-  document.getElementById('btn-month').addEventListener('click', () => setDefaultDate('30days'));
+
+  const modeNowBtn = document.getElementById('mode-now');
+  const modeCustomBtn = document.getElementById('mode-custom');
+  const customDateRow = document.getElementById('custom-date-row');
+  const customStartInput = document.getElementById('custom-start-input');
+
+  function setMode(mode) {
+    if (mode === 'now') {
+      modeNowBtn.classList.add('btn-primary');
+      modeCustomBtn.classList.remove('btn-primary');
+      customDateRow.style.display = 'none';
+      const t = getTodayKST();
+      applyStartDate(t.y, t.mo, t.da);
+    } else {
+      modeNowBtn.classList.remove('btn-primary');
+      modeCustomBtn.classList.add('btn-primary');
+      customDateRow.style.display = 'block';
+      const [y, mo, da] = customStartInput.value.split('-').map(Number);
+      applyStartDate(y, mo, da);
+    }
+  }
+
+  modeNowBtn.addEventListener('click', () => setMode('now'));
+  modeCustomBtn.addEventListener('click', () => setMode('custom'));
+  customStartInput.addEventListener('change', () => {
+    const [y, mo, da] = customStartInput.value.split('-').map(Number);
+    applyStartDate(y, mo, da);
+  });
+
   document.getElementById('copy-epoch').addEventListener('click', (e) => copyText(epochResult.textContent, e.target));
   document.getElementById('copy-cmd').addEventListener('click', (e) => copyText(cmdResult.textContent, e.target));
   document.getElementById('copy-msg').addEventListener('click', (e) => copyText(msgResult.value, e.target));
+  daysLeftInput.addEventListener('input', updateExpiryMessage);
+  document.getElementById('copy-expiry-msg').addEventListener('click', (e) => copyText(expiryMsgResult.value, e.target));
 
-  // Init: default to 30-day plan expiry
-  setDefaultDate('30days');
+  // Init: default to "지금 기준" 30-day plan expiry
+  const initToday = getTodayKST();
+  customStartInput.value = `${initToday.y}-${pad(initToday.mo)}-${pad(initToday.da)}`;
+  setMode('now');
   updateNowClock();
   setInterval(updateNowClock, 1000);
 </script>
