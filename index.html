@@ -279,7 +279,7 @@
     const group = groupSelect.value;
     const epoch = epochResult.textContent;
     if (!epoch || epoch === '-') { cmdResult.textContent = '-'; } else {
-      cmdResult.textContent = `lp user ${nick} parent addtemp ${group} ${epoch} accumulate`;
+      cmdResult.textContent = `lp user ${nick} parent addtemp ${group} ${epoch} replace`;
     }
     updateMessage();
   }
