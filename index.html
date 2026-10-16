@@ -351,6 +351,7 @@
     const group = groupSelect.value;
     const groupCap = capitalize(group);
     const price = PASS_PRICE[group];
+    const durDays = getDurationDays() || 30;
 
     // Start date: the date last used for a 30-day calculation (defaults to today)
     const sd = passStartDate || (() => { const t = getTodayKST(); return { y: t.y, mo: t.mo, da: t.da }; })();
@@ -368,7 +369,7 @@
 닉네임: ${nick}
 패스 기간: ${startDate} ~ ${endDate}
 
-내용: ${groupCap} Pass | 금액: ₩${formatWon(price)}
+내용: ${groupCap} Pass ${durDays}일 | 금액: ₩${formatWon(price)}
 
 후원하신 패스는 **서버 재접속 시** 사용 가능합니다.
 -# 🌳 Lelsub.kr | SEASON4`;
