@@ -156,9 +156,6 @@
   .card-donate { border-left: 3px solid var(--accent); }
   .card-expire { border-left: 3px solid var(--accent2); }
   .card-expire h2 { color: var(--accent2); }
-  /* 만료 등급 카드: 아래 카드와 붙어 보이게 */
-  .card-attach { margin-bottom: 4px; padding: 14px 18px; border-bottom-left-radius: 6px; border-bottom-right-radius: 6px; }
-  .card-attach + .card { border-top-left-radius: 6px; border-top-right-radius: 6px; }
 </style>
 </head>
 <body>
@@ -210,10 +207,11 @@
         <div style="flex:1;">
           <label for="group-select" style="margin-bottom:6px;">그룹</label>
           <select id="group-select" style="width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:14px; font-family:inherit;">
-            <option value="expert">expert</option>
-            <option value="elite">elite</option>
-            <option value="prime">prime</option>
             <option value="eternal">eternal</option>
+            <option value="prime">prime</option>
+            <option value="elite">elite</option>
+            <option value="expert">expert</option>
+            <option value="user">user</option>
           </select>
         </div>
       </div>
@@ -237,18 +235,6 @@
   <div class="section-title sec-expire">
     <div class="st-main">⏰ 패스가 만료될 때</div>
     <div class="st-sub">만료 예정 안내 · 만료 명령어</div>
-  </div>
-
-  <div class="card card-expire card-attach">
-    <h2>만료 등급</h2>
-    <label for="expire-group-select">등급 (아래 만료 예정 안내 메시지 · 만료 명령어에 적용)</label>
-    <select id="expire-group-select" style="width:100%; padding:10px 12px; background: var(--bg); border:1px solid var(--border); border-radius:8px; color: var(--text); font-size:14px; font-family:inherit;">
-      <option value="user">user</option>
-      <option value="expert">expert</option>
-      <option value="elite">elite</option>
-      <option value="prime">prime</option>
-      <option value="eternal">eternal</option>
-    </select>
   </div>
 
   <div class="card card-expire">
@@ -350,8 +336,9 @@
     const nick = nicknameInput.value.trim() || '닉네임';
     const group = groupSelect.value;
     const groupCap = capitalize(group);
-    const price = PASS_PRICE[group];
     const durDays = getDurationDays() || 30;
+    // 30일이 기본가, 기간이 늘면 30일 단위로 비례 (예: eternal 60일 = 31,900 × 2 = 63,800)
+    const price = PASS_PRICE[group] ? Math.round(PASS_PRICE[group] * durDays / 30) : null;
 
     // Start date: the date last used for a 30-day calculation (defaults to today)
     const sd = passStartDate || (() => { const t = getTodayKST(); return { y: t.y, mo: t.mo, da: t.da }; })();
@@ -369,7 +356,7 @@
 닉네임: ${nick}
 패스 기간: ${startDate} ~ ${endDate}
 
-내용: ${groupCap} Pass ${durDays}일 | 금액: ₩${formatWon(price)}
+내용: ${groupCap} Pass ${durDays}일 | 금액: ${price === null ? '-' : '₩' + formatWon(price)}
 
 후원하신 패스는 **서버 재접속 시** 사용 가능합니다.
 -# 🌳 Lelsub.kr | SEASON4
@@ -380,7 +367,7 @@
 
   function updateExpiryMessage() {
     if (!dtInput.value) { expiryMsgResult.value = '-'; return; }
-    const group = expireGroupSelect.value;
+    const group = groupSelect.value;
     const groupCap = capitalize(group);
     const [datePart] = dtInput.value.split('T');
     const [ey, em, ed] = datePart.split('-');
@@ -474,17 +461,16 @@
     prime:   { scb: 15000, home: 4 },
     eternal: { scb: 40000, home: 6 }
   };
-  const expireGroupSelect = document.getElementById('expire-group-select');
   const expireScbResult = document.getElementById('expire-scb-result');
   const expireHomeResult = document.getElementById('expire-home-result');
 
   function updateExpireCommands() {
-    const v = EXPIRE_VALUES[expireGroupSelect.value];
+    const v = EXPIRE_VALUES[groupSelect.value];
     expireScbResult.textContent = `scb ${v.scb}`;
     expireHomeResult.textContent = `trimhomeadmin ${v.home}`;
   }
 
-  expireGroupSelect.addEventListener('change', () => { updateExpireCommands(); updateExpiryMessage(); });
+  groupSelect.addEventListener('change', updateExpireCommands);
   document.getElementById('copy-expire-scb').addEventListener('click', (e) => copyText(expireScbResult.textContent, e.target));
   document.getElementById('copy-expire-home').addEventListener('click', (e) => copyText(expireHomeResult.textContent, e.target));
   updateExpireCommands();
